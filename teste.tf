@@ -1,5 +1,22 @@
 provider "aws" {
-  region = "us-west-2" # Altere para sua região desejada
+  region = "us-east-2" # Altere para sua região desejada
+}
+
+
+data "aws_ami" "ubuntu" {
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+
+  owners = ["099720109477"] # Canonical
 }
 
 # Criação da VPC
@@ -15,7 +32,7 @@ resource "aws_vpc" "main" {
 resource "aws_subnet" "public" {
   vpc_id     = aws_vpc.main.id
   cidr_block = "10.0.1.0/24"
-  availability_zone = "us-west-2a" # Altere para a zona de disponibilidade desejada
+  availability_zone = "us-east-2a" # Altere para a zona de disponibilidade desejada
 
   tags = {
     Name = "minha-subnet-publica"
@@ -66,7 +83,7 @@ resource "aws_key_pair" "generated_key" {
 # Criação do Security Group
 resource "aws_security_group" "ec2_sg" {
   name        = "meu-ec2-sg"
-  description = "Security group para minha instância EC2"
+  description = "Security group"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -82,7 +99,7 @@ resource "aws_security_group" "ec2_sg" {
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
-    description = "Permitir todo o tráfego de saída"
+    description = "Permitir"
   }
 
   tags = {
@@ -97,8 +114,8 @@ module "ec2_instance" {
 
   name           = "meu-servidor-terraform"
   instance_type  = "t2.micro" # Tipo de instância - altere conforme necessário
-  ami            = "ami-0c55b159cbfafe1f0" # AMI do Amazon Linux 2 - altere para a AMI desejada
-
+  ami            = data.aws_ami.ubuntu.id # AMI do Amazon Linux 2 - altere para a AMI desejada
+  associate_public_ip_address = true
   vpc_security_group_ids = [aws_security_group.ec2_sg.id]
   subnet_id              = aws_subnet.public.id
 
@@ -115,4 +132,16 @@ resource "local_file" "private_key" {
   content  = tls_private_key.ssh_key.private_key_pem
   filename = "${path.module}/meu-keypair-terraform.pem" # Salva a chave privada no diretório do projeto
   file_permission = "0600"
+}
+
+
+output "ec2_complete_public_ip" {
+  description = "The public IP address assigned to the instance, if applicable. NOTE: If you are using an aws_eip with your instance, you should refer to the EIP's address directly and not use `public_ip` as this field will change after the EIP is attached"
+  value       = module.ec2_instance.public_ip
+}
+
+
+output "ec2_complete_public_dns" {
+  description = "The public DNS name assigned to the instance. For EC2-VPC, this is only available if you've enabled DNS hostnames for your VPC"
+  value       = module.ec2_instance.public_dns
 }
